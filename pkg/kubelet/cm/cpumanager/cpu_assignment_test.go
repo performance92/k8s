@@ -668,36 +668,16 @@ func TestTakeByTopologyNUMAPacked(t *testing.T) {
 			"",
 			mustParseCPUSet(t, "0-29,40-69,30,31,70,71"),
 		},
-	}...)
-
-	for _, tc := range testCases {
-		t.Run(tc.description, func(t *testing.T) {
-			strategy := CPUSortingStrategyPacked
-			if tc.opts.DistributeCPUsAcrossCores {
-				strategy = CPUSortingStrategySpread
-			}
-
-			result, err := takeByTopologyNUMAPacked(tc.topo, tc.availableCPUs, tc.numCPUs, strategy)
-			if tc.expErr != "" && err != nil && err.Error() != tc.expErr {
-				t.Errorf("expected error to be [%v] but it was [%v]", tc.expErr, err)
-			}
-			if !result.Equals(tc.expResult) {
-				t.Errorf("expected result [%s] to equal [%s]", result, tc.expResult)
-			}
-		})
-	}
-}
-
-func TestTakeByTopologyUncoreCachePacked(t *testing.T) {
-	testCases := []struct {
-		description   string
-		topo          *topology.CPUTopology
-		opts          StaticPolicyOptions
-		availableCPUs cpuset.CPUSet
-		numCPUs       int
-		expErr        string
-		expResult     cpuset.CPUSet
-	}{
+		// Test cases for PreferAlignByUncoreCache
+		{
+			"take cpus from two full UncoreCaches and partial from a single UncoreCache",
+			topoUncoreSingleSocketNoSMT,
+			StaticPolicyOptions{PreferAlignByUncoreCacheOption: true},
+			mustParseCPUSet(t, "1-15"),
+			10,
+			"",
+			cpuset.New(1, 2, 4, 5, 6, 7, 8, 9, 10, 11),
+		},
 		{
 			"take one cpu from dual socket with HT - core from Socket 0",
 			topoDualSocketHT,
@@ -761,7 +741,7 @@ func TestTakeByTopologyUncoreCachePacked(t *testing.T) {
 			"",
 			mustParseCPUSet(t, "4-7,12-15,1,9"),
 		},
-	}
+	}...)
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
@@ -770,7 +750,7 @@ func TestTakeByTopologyUncoreCachePacked(t *testing.T) {
 				strategy = CPUSortingStrategySpread
 			}
 
-			result, err := takeByTopologyUncoreCachePacked(tc.topo, tc.availableCPUs, tc.numCPUs, strategy)
+			result, err := takeByTopologyNUMAPacked(tc.topo, tc.availableCPUs, tc.numCPUs, strategy, tc.opts.PreferAlignByUncoreCacheOption)
 			if tc.expErr != "" && err != nil && err.Error() != tc.expErr {
 				t.Errorf("expected error to be [%v] but it was [%v]", tc.expErr, err)
 			}
@@ -871,7 +851,7 @@ func TestTakeByTopologyWithSpreadPhysicalCPUsPreferredOption(t *testing.T) {
 		if tc.opts.DistributeCPUsAcrossCores {
 			strategy = CPUSortingStrategySpread
 		}
-		result, err := takeByTopologyNUMAPacked(tc.topo, tc.availableCPUs, tc.numCPUs, strategy)
+		result, err := takeByTopologyNUMAPacked(tc.topo, tc.availableCPUs, tc.numCPUs, strategy, tc.opts.PreferAlignByUncoreCacheOption)
 		if tc.expErr != "" && err.Error() != tc.expErr {
 			t.Errorf("testCase %q failed, expected error to be [%v] but it was [%v]", tc.description, tc.expErr, err)
 		}
