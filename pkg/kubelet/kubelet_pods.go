@@ -1392,6 +1392,7 @@ func (kl *Kubelet) HandlePodCleanups(ctx context.Context) error {
 
 	// Cleanup any backoff entries.
 	kl.backOff.GC()
+	kl.staticBackOff.GC()
 	return nil
 }
 
