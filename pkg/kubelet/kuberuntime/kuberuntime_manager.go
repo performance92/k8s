@@ -551,7 +551,7 @@ func IsInPlacePodVerticalScalingAllowed(pod *v1.Pod) bool {
 
 // computePodResizeAction determines the actions required (if any) to resize the given container.
 // Returns whether to keep (true) or restart (false) the container.
-func (m *kubeGenericRuntimeManager) computePodResizeAction(pod *v1.Pod, containerIdx int, kubeContainerStatus *kubecontainer.Status, changes *podActions) (keepContainer bool) {
+func (m *kubeGenericRuntimeManager) computePodResizeAction(pod *v1.Pod, containerIdx int, kubeContainerStatus *kubecontainer.Status, changes *podActions, backOff *flowcontrol.Backoff) (keepContainer bool) {
 	container := pod.Spec.Containers[containerIdx]
 
 	// Determine if the *running* container needs resource update by comparing v1.Spec.Resources (desired)
@@ -627,6 +627,7 @@ func (m *kubeGenericRuntimeManager) computePodResizeAction(pod *v1.Pod, containe
 	resizeMemLim, restartMemLim := determineContainerResize(v1.ResourceMemory, desiredResources.memoryLimit, currentResources.memoryLimit)
 	resizeCPULim, restartCPULim := determineContainerResize(v1.ResourceCPU, desiredResources.cpuLimit, currentResources.cpuLimit)
 	resizeCPUReq, restartCPUReq := determineContainerResize(v1.ResourceCPU, desiredResources.cpuRequest, currentResources.cpuRequest)
+	key := getStableKey(pod, &container)
 	if restartCPULim || restartCPUReq || restartMemLim {
 		// resize policy requires this container to restart
 		changes.ContainersToKill[kubeContainerStatus.ID] = containerToKillInfo{
@@ -636,6 +637,7 @@ func (m *kubeGenericRuntimeManager) computePodResizeAction(pod *v1.Pod, containe
 		}
 		changes.ContainersToStart = append(changes.ContainersToStart, containerIdx)
 		changes.UpdatePodResources = true
+		backOff.Reset(key)
 		return false
 	} else {
 		if resizeMemLim {
@@ -647,6 +649,7 @@ func (m *kubeGenericRuntimeManager) computePodResizeAction(pod *v1.Pod, containe
 			markContainerForUpdate(v1.ResourceCPU, desiredResources.cpuRequest, currentResources.cpuRequest)
 		}
 	}
+	backOff.Reset(key)
 	return true
 }
 
@@ -812,7 +815,7 @@ func (m *kubeGenericRuntimeManager) updatePodContainerResources(pod *v1.Pod, res
 }
 
 // computePodActions checks whether the pod spec has changed and returns the changes if true.
-func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus) podActions {
+func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus, backOff *flowcontrol.Backoff) podActions {
 	klog.V(5).InfoS("Syncing Pod", "pod", klog.KObj(pod))
 
 	createPodSandbox, attempt, sandboxID := runtimeutil.PodSandboxChanged(pod, podStatus)
@@ -989,7 +992,7 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 			// If the container failed the startup probe, we should kill it.
 			message = fmt.Sprintf("Container %s failed startup probe", container.Name)
 			reason = reasonStartupProbe
-		} else if IsInPlacePodVerticalScalingAllowed(pod) && !m.computePodResizeAction(pod, idx, containerStatus, &changes) {
+		} else if IsInPlacePodVerticalScalingAllowed(pod) && !m.computePodResizeAction(pod, idx, containerStatus, &changes, backOff) {
 			// computePodResizeAction updates 'changes' if resize policy requires restarting this container
 			continue
 		} else {
@@ -1039,7 +1042,7 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 //  8. Create normal containers.
 func (m *kubeGenericRuntimeManager) SyncPod(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) (result kubecontainer.PodSyncResult) {
 	// Step 1: Compute sandbox and container changes.
-	podContainerChanges := m.computePodActions(ctx, pod, podStatus)
+	podContainerChanges := m.computePodActions(ctx, pod, podStatus, backOff)
 	klog.V(3).InfoS("computePodActions got for pod", "podActions", podContainerChanges, "pod", klog.KObj(pod))
 	if podContainerChanges.CreateSandbox {
 		ref, err := ref.GetReference(legacyscheme.Scheme, pod)
