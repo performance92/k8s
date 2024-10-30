@@ -1664,7 +1664,13 @@ func TestMergePodStatus(t *testing.T) {
 				Conditions: []v1.PodCondition{
 					{
 						Type:   v1.PodReady,
-						Status: v1.ConditionTrue,
+						Status: v1.ConditionFalse,
+						Reason: "PodFailed",
+					},
+					{
+						Type:   v1.ContainersReady,
+						Status: v1.ConditionFalse,
+						Reason: "PodFailed",
 					},
 					{
 						Type:   v1.PodScheduled,
@@ -1823,7 +1829,13 @@ func TestMergePodStatus(t *testing.T) {
 					},
 					{
 						Type:   v1.PodReady,
-						Status: v1.ConditionTrue,
+						Status: v1.ConditionFalse,
+						Reason: "PodFailed",
+					},
+					{
+						Type:   v1.ContainersReady,
+						Status: v1.ConditionFalse,
+						Reason: "PodFailed",
 					},
 					{
 						Type:   v1.PodScheduled,
@@ -2012,7 +2024,13 @@ func TestMergePodStatus(t *testing.T) {
 				Conditions: []v1.PodCondition{
 					{
 						Type:   v1.PodReady,
-						Status: v1.ConditionTrue,
+						Status: v1.ConditionFalse,
+						Reason: "PodFailed",
+					},
+					{
+						Type:   v1.ContainersReady,
+						Status: v1.ConditionFalse,
+						Reason: "PodFailed",
 					},
 					{
 						Type:   v1.PodScheduled,
